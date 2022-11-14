@@ -1,3 +1,4 @@
+from re import S
 import cv2
 import numpy as np
 from PIL import Image
@@ -168,94 +169,92 @@ def ReturnCrop(pathImage):
     label_boxes = dict(zip(label, list_boxes))
     label_miss = find_miss_corner(label_boxes, classes)
     #Noi suy goc neu thieu 1 goc cua CCCD
-    if(label_miss != ''):
+    if(len(label_miss) == 1):
         calculate_missed_coord_corner(label_miss, label_boxes)
         source_points = np.float32([label_boxes['top_left'], label_boxes['bottom_left'],
                                     label_boxes['bottom_right'], label_boxes['top_right']])
         crop = perspective_transoform(image, source_points)
         return crop
-    else:
+    elif len(label_miss)==0:
         source_points = np.float32([label_boxes['top_left'], label_boxes['bottom_left'],
                                     label_boxes['bottom_right'], label_boxes['top_right']])
         crop = perspective_transoform(image, source_points)
         return crop
-# Ham tra ve ket qua thong tin CCCD
-# Upload part
 #Ham check miss_conner
 def find_miss_corner(labels, classes):
+    labels_miss = []
     for i in classes:
         bool = i in labels
         if(bool == False):
-            return i
+            labels_miss.append(i)
+    return labels_miss
+#Ham tinh toan goc miss_conner
 def calculate_missed_coord_corner(label_missed, coordinate_dict):
     thresh = 0
-    if(label_missed=='top_left'):
+    if(label_missed[0]=='top_left'):
         midpoint = np.add(coordinate_dict['top_right'], coordinate_dict['bottom_left']) / 2
-        print(midpoint)
         y = 2 * midpoint[1] - coordinate_dict['bottom_right'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['bottom_right'][0] - thresh
         coordinate_dict['top_left'] = (x, y)
-    elif(label_missed=='top_right'):
+    elif(label_missed[0]=='top_right'):
         midpoint = np.add(coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['bottom_left'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['bottom_left'][0] - thresh
         coordinate_dict['top_right'] = (x, y)
-    elif(label_missed=='bottom_left'):
+    elif(label_missed[0]=='bottom_left'):
         midpoint = np.add(coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['top_right'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['top_right'][0] - thresh
         coordinate_dict['bottom_left'] = (x, y)
-    elif(label_missed=='bottom_right'):
+    elif(label_missed[0]=='bottom_right'):
         midpoint = np.add(coordinate_dict['bottom_left'], coordinate_dict['top_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['top_left'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['top_left'][0] - thresh
         coordinate_dict['bottom_right'] = (x, y)
     return coordinate_dict
+# Ham tra ve ket qua thong tin CCCD
+# Upload part
 def ReturnInfoCard(pathImage):
     typeimage = check_type_image(pathImage)
-    #typeimageB = check_type_image(pathImageB)
     if (typeimage != 'png' and typeimage != 'jpeg' and typeimage != 'jpg' and typeimage != 'bmp'):
         obj = MessageInfo(None, 1, 'Invalid image file! Please try again.')
         return obj
     else:
         crop = ReturnCrop(pathImage)
-        cv2.imshow('imageC', crop)
-        cv2.waitKey()
-        #cropB = ReturnCrop(pathImageB)
         # Trich xuat thong tin tu imageCrop
         if (crop is not None):
             indices, boxes, classes, class_ids, image, confidences = getIndices(crop, net_rec, classes_rec)
-            #indicesB, boxesB, classesB, class_idsB, imageB, confidencesB = getIndices(cropB, net_rec, classes_rec)
             dict_var = {'id': {}, 'name': {}, 'dob': {}, 'sex': {}, 'nationality': {},
                          'home': {}, 'address': {}, 'doe': {}, 'features':{}, 'issue_date': {} }
             home_text, address_text, features_text = [], [], []
             label_boxes = []
-            imgFace = None
-            pathSave = os.getcwd() + '\\citizens\\'
-            stringImage = "citizen" + '_' + str(time.time()) + ".jpg"
+            # imgFace = None
+            # pathSave = os.getcwd() + '\\citizens\\'
+            # stringImage = "citizen" + '_' + str(time.time()) + ".jpg"
             for i in indices:
                 #i = i[0]
                 box = boxes[i]
-                x = box[0]
-                y = box[1]
-                w = box[2]
-                h = box[3]
-                label_boxes.append(str(classes[class_ids[i]]))
+                x, y, w, h = box[0], box[1], box[2], box[3]
                 # draw_prediction(crop, classes[class_ids[i]], confidences[i], round(x), round(y), round(x + w), round(y + h))
-                imageCrop = image[round(y): round(y + h), round(x):round(x + w)]
-                img = Image.fromarray(imageCrop)
-                s = detector.predict(img)
                 if(class_ids[i] != 10):
+                    label_boxes.append(str(classes[class_ids[i]]))
+                    imageCrop = image[round(y): round(y + h), round(x):round(x + w)]
+                    img = Image.fromarray(imageCrop)
+                    start = time.time()
+                    s = detector.predict(img)
+                    end = time.time()
+                    total_time = end - start
+                    print(str(round(total_time,2)) + ' [sec_rec]' + classes[class_ids[i]])
                     dict_var[classes[class_ids[i]]].update({s:y})
-                else:   
-                    imgFace = imageCrop
-                    if (os.path.exists(pathSave)):
-                        cv2.imwrite(pathSave + stringImage, imgFace)
-                    else:
-                        os.mkdir(pathSave)
-                        cv2.imwrite(pathSave + stringImage, imgFace)
+                # else:   
+                #     imgFace = imageCrop
+                    # if (os.path.exists(pathSave)):
+                    #     cv2.imwrite(pathSave + stringImage, imgFace)
+                    # else:
+                    #     os.mkdir(pathSave)
+                    #     cv2.imwrite(pathSave + stringImage, imgFace)
             classesFront = ['id', 'name', 'dob', 'sex',
-                            'nationality', 'home', 'address', 'doe', 'image']
+                            'nationality', 'home', 'address', 'doe']
             classesBack = ['features', 'issue_date']
             if (check_enough_labels(label_boxes, classesBack)):
                 type = "cccd_back"
@@ -267,7 +266,7 @@ def ReturnInfoCard(pathImage):
                 obj = ExtractCardBack(
                     features_text, list(dict_var['issue_date'].keys())[0], type, errorCode, errorMessage)
                 return obj
-            if (check_enough_labels(label_boxes, classesFront)):
+            elif (check_enough_labels(label_boxes, classesFront)):
                 type = "cccd_front"
                 errorCode = 0
                 errorMessage = ""
@@ -278,17 +277,15 @@ def ReturnInfoCard(pathImage):
                 home_text = " ".join(home_text)
                 address_text = " ".join(address_text)
                 obj = ExtractCardFront(list(dict_var['id'].keys()), list(dict_var['name'].keys())[0], list(dict_var['dob'].keys()), list(dict_var['sex'].keys()),
-                                        list(dict_var['nationality'].keys())[0], home_text, address_text, list(dict_var['doe'].keys()), stringImage, type, errorCode,
-                                        errorMessage)
+                                        list(dict_var['nationality'].keys())[0], home_text, address_text, list(dict_var['doe'].keys()), type, errorCode,errorMessage)
                 return obj
             else:
                 obj = MessageInfo(
                     None, 3, "The photo quality is low. Please try the image again !")
-                print("OK")
                 return obj
         else:
             obj = MessageInfo(
-                None, 4, "Error! Unable to find ID card in the image !")
+                None, 4, "Error! Unable to find ID Card in the image !")
             return obj
 def compare(pathInput, pathSelfie):
     input_image = face_recognition.load_image_file(pathInput)
@@ -304,7 +301,7 @@ net_rec, classes_rec = load_model('./model/rec/yolov4-custom_rec.weights',
                                   './model/rec/yolov4-custom_rec.cfg', './model/rec/obj_rec.names')
 # Class object
 class ExtractCardFront:
-    def __init__(self, id, name, dob, sex, nationality, home, address, doe,imageFace, type, errorCode, errorMessage):
+    def __init__(self, id, name, dob, sex, nationality, home, address, doe, type, errorCode, errorMessage):
         self.id = id
         self.name = name
         self.dob = dob
@@ -313,7 +310,6 @@ class ExtractCardFront:
         self.home = home
         self.address = address
         self.doe = doe
-        self.imageFace = imageFace
         self.type = type
         self.errorCode = errorCode
         self.errorMessage = errorMessage
@@ -334,15 +330,24 @@ class MessageInfo:
         self.errorCode = errorCode
         self.errorMessage = errorMessage
 if __name__ == "__main__":
-    proc1 = Process(target=ReturnInfoCard, args=("D:\\Dowload Chorme\\dataCCCD\\cccd\\034191000571\\cmnd\\Image0.jpeg",))  # instantiating without any argument
+    # start = time.time()
+    # proc1 = Process(target=ReturnInfoCard, args=("CCCD (480).jpeg",))  # instantiating without any argument
     # proc2 = Process(target=ReturnInfoCard, args=("CCCD (481.2).jpeg",))
-    proc1.start()
+    # proc1.start()
     # proc2.start()
-    proc1.join()
+    # proc1.join()
     # proc2.join()
+    # end = time.time()
+    # total_time = end - start
+    # print(str(total_time) + ' [sec]')
     # print("Done!")
-    # obj = ReturnInfoCard("CCCD (480).jpeg")
-    # print(obj.errorCode, obj.errorMessage)
+    start = time.time()
+    obj = ReturnInfoCard("CCCD (480).jpeg")
+    #obj = ReturnInfoCard("CCCD (481.2).jpeg")
+    print(obj.errorCode, obj.errorMessage)
+    end = time.time()
+    total_time = end - start
+    print(str(total_time) + ' [sec]')
     # if (obj.type == "cccd_front"):
     #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
     #     "data":[{"id": obj.id, "name": obj.name, "dob": obj.dob,"sex": obj.sex,
