@@ -9,6 +9,8 @@ import base64
 import time
 import face_recognition
 from multiprocessing import Process
+import glob
+import math
 # Funtions
 
 
@@ -42,7 +44,7 @@ def check_type_image(path):
 
 def get_output_layers(net):
     layer_names = net.getLayerNames()
-    output_layers = [layer_names[i - 1]
+    output_layers = [layer_names[i[0] - 1]
                      for i in net.getUnconnectedOutLayers()]
     return output_layers
 
@@ -157,7 +159,7 @@ def ReturnCrop(pathImage):
     list_boxes = []
     label = []
     for i in indices:
-        #i = i[0]
+        i = i[0]
         box = boxes[i]
         # print(box,str(classes[class_ids[i]]))
         x = box[0]
@@ -217,7 +219,7 @@ def calculate_missed_coord_corner(label_missed, coordinate_dict):
 def ReturnInfoCard(pathImage):
     typeimage = check_type_image(pathImage)
     if (typeimage != 'png' and typeimage != 'jpeg' and typeimage != 'jpg' and typeimage != 'bmp'):
-        obj = MessageInfo(None, 1, 'Invalid image file! Please try again.')
+        obj = MessageInfo(None, 1, 'Ảnh không đúng định dạng. Vui lòng thử lại !')
         return obj
     else:
         crop = ReturnCrop(pathImage)
@@ -232,20 +234,20 @@ def ReturnInfoCard(pathImage):
             # pathSave = os.getcwd() + '\\citizens\\'
             # stringImage = "citizen" + '_' + str(time.time()) + ".jpg"
             for i in indices:
-                #i = i[0]
+                i = i[0]
                 box = boxes[i]
                 x, y, w, h = box[0], box[1], box[2], box[3]
+                start = time.time()
                 # draw_prediction(crop, classes[class_ids[i]], confidences[i], round(x), round(y), round(x + w), round(y + h))
                 if(class_ids[i] != 10):
                     label_boxes.append(str(classes[class_ids[i]]))
                     imageCrop = image[round(y): round(y + h), round(x):round(x + w)]
                     img = Image.fromarray(imageCrop)
-                    start = time.time()
-                    s = detector.predict(img)
-                    end = time.time()
-                    total_time = end - start
-                    print(str(round(total_time,2)) + ' [sec_rec]' + classes[class_ids[i]])
+                    s = detector.predict(img)          
                     dict_var[classes[class_ids[i]]].update({s:y})
+                end = time.time()
+                total_time = end - start
+                print(str(round(total_time,2)) + ' [sec_rec]' + classes[class_ids[i]])
                 # else:   
                 #     imgFace = imageCrop
                     # if (os.path.exists(pathSave)):
@@ -281,19 +283,37 @@ def ReturnInfoCard(pathImage):
                 return obj
             else:
                 obj = MessageInfo(
-                    None, 3, "The photo quality is low. Please try the image again !")
+                    None, 3, "Ảnh không đạt tiêu chuẩn. Thử lại ảnh khác !")
                 return obj
         else:
             obj = MessageInfo(
-                None, 4, "Error! Unable to find ID Card in the image !")
+                None, 4, "Error! Không tìm thấy CCCD trong ảnh.")
             return obj
 def compare(pathInput, pathSelfie):
+    face_distance = None
     input_image = face_recognition.load_image_file(pathInput)
     selfie_image = face_recognition.load_image_file(pathSelfie)
-    input_encoding = face_recognition.face_encodings(input_image)[0]
-    selfie_encoding = face_recognition.face_encodings(selfie_image)[0]
-    face_distance = face_recognition.face_distance([input_encoding],selfie_encoding)
-    return face_distance[0]
+    input_face_locations = face_recognition.face_locations(input_image)
+    if(len(input_face_locations)==1):
+        ### Encoded input image
+        input_face_encodings = face_recognition.face_encodings(input_image, input_face_locations)[0]
+        ### Encoded selfie image
+        selfie_face_locations = face_recognition.face_locations(selfie_image)
+        if(len(selfie_face_locations)==1):
+            selfie_face_encodings = face_recognition.face_encodings(selfie_image, selfie_face_locations)[0]
+            face_distance = face_recognition.face_distance([input_face_encodings],selfie_face_encodings)[0]
+        return len(input_face_locations), len(selfie_face_locations) ,face_distance
+    else: 
+        return len(input_face_locations), 0 ,face_distance
+def face_confidence(face_distance, face_match_threshold=0.55):
+    range = (1.0 - face_match_threshold)
+    linear_val = (1.0 - face_distance) / (range * 2.0)
+
+    if face_distance > face_match_threshold:
+        return str(round(linear_val * 100, 2)) + '%'
+    else:
+        value = (linear_val + ((1.0 - linear_val) * math.pow((linear_val - 0.5) * 2, 0.2))) * 100
+        return str(round(value, 2)) + '%'
 detector = vietocr_load()
 net_det, classes_det = load_model('./model/det/yolov4-tiny-custom_det.weights',
                                   './model/det/yolov4-tiny-custom_det.cfg', './model/det/obj_det.names')
@@ -329,33 +349,30 @@ class MessageInfo:
         self.type = type
         self.errorCode = errorCode
         self.errorMessage = errorMessage
-if __name__ == "__main__":
-    # start = time.time()
-    # proc1 = Process(target=ReturnInfoCard, args=("CCCD (480).jpeg",))  # instantiating without any argument
-    # proc2 = Process(target=ReturnInfoCard, args=("CCCD (481.2).jpeg",))
-    # proc1.start()
-    # proc2.start()
-    # proc1.join()
-    # proc2.join()
-    # end = time.time()
-    # total_time = end - start
-    # print(str(total_time) + ' [sec]')
-    # print("Done!")
-    start = time.time()
-    obj = ReturnInfoCard("CCCD (480).jpeg")
-    #obj = ReturnInfoCard("CCCD (481.2).jpeg")
-    print(obj.errorCode, obj.errorMessage)
-    end = time.time()
-    total_time = end - start
-    print(str(total_time) + ' [sec]')
-    # if (obj.type == "cccd_front"):
-    #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
-    #     "data":[{"id": obj.id, "name": obj.name, "dob": obj.dob,"sex": obj.sex,
-    #     "nationality": obj.nationality,"home": obj.home, "address": obj.address, "doe": obj.doe, "type": obj.type}]}))
-    # if (obj.type == "cccd_back"):
-    #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
-    #             "data":[{"features": obj.features, "issue_date": obj.issue_date,
-    #             "type": obj.type}]}))
-    # else:
-    #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
-    #             "data": []}))
+# i = 1
+# for file in glob.glob("D:\\Download Chorme\\cccd\cccd\\dataTest\\*.jpg"):
+#     crop = ReturnCrop(file)
+#     pathSave = 'D:\DATN\DATN_Extracter_Identity_Card_VN\cropCCCD'+ '\\'
+#     if(crop is not None):
+#         cv2.imwrite(pathSave+'cropCCCD'+str(i) +'.jpg', crop)
+#         print("Done file " +"_ " + file)
+#         i = i + 1
+# crop = ReturnCrop('D:\DATN\DATN_Extracter_Identity_Card_VN\CCCD (481.2).jpeg')
+# if(crop is not None):
+#     cv2.imwrite('cropCCCD30.jpg', crop)
+#     print("Done file " +"_ ")
+# start = time.time()
+# end = time.time()
+# total_time = end - start
+# print(str(total_time) + ' [sec]')
+# if (obj.type == "cccd_front"):
+#     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
+#     "data":[{"id": obj.id, "name": obj.name, "dob": obj.dob,"sex": obj.sex,
+#     "nationality": obj.nationality,"home": obj.home, "address": obj.address, "doe": obj.doe, "type": obj.type}]}))
+# if (obj.type == "cccd_back"):
+#     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
+#             "data":[{"features": obj.features, "issue_date": obj.issue_date,
+#             "type": obj.type}]}))
+# else:
+#     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
+#             "data": []}))
