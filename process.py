@@ -1,4 +1,3 @@
-from re import S
 import cv2
 import numpy as np
 from PIL import Image
@@ -11,7 +10,8 @@ import face_recognition
 from multiprocessing import Process
 import glob
 import math
-# Funtions
+import json
+# ALl funtions process
 
 
 # Ham decode, endecode
@@ -30,7 +30,6 @@ def EndecodeImage(base64_img):
     with open('decoded_image.png', 'wb') as file_to_save:
         decoded_image_data = base64.decodebytes(base64_img_bytes)
         file_to_save.write(decoded_image_data)
-# Ham get output_layer
 
 # Ham check dinh dang dau vao cua anh
 
@@ -40,6 +39,8 @@ def check_type_image(path):
     imgName = imgName[imgName.rindex('.')+1:]
     imgName = imgName.lower()
     return imgName
+
+# Ham get output_layer
 
 
 def get_output_layers(net):
@@ -83,7 +84,7 @@ def perspective_transoform(image, points):
         image, M, (maxWidth, maxHeight), flags=cv2.INTER_LINEAR)
     return out
 
-# Ham check classes
+# Ham check classes detection
 
 
 def check_enough_labels(labels, classes):
@@ -92,6 +93,7 @@ def check_enough_labels(labels, classes):
         if bool == False:
             return (False)
     return (True)
+
 # Ham load model Yolo
 
 
@@ -103,7 +105,7 @@ def load_model(path_weights_yolo, path_clf_yolo, path_to_class):
         classes = [line.strip() for line in f.readlines()]
     return net, classes
 
-# Ham getIndices
+# Return indices và cac thong tin ve cac boxes du doan
 
 
 def getIndices(image, net, classes):
@@ -111,12 +113,14 @@ def getIndices(image, net, classes):
     boxes = []
     class_ids = []
     confidences = []
-    conf_threshold = 0.6
-    nms_threshold = 0.4
-    scale = 0.00392
-    # (416,416) img target size, swapRB=True,  # BGR -> RGB, center crop = False
-    blob = cv2.dnn.blobFromImage(
-        image, scale, (416, 416), (0, 0, 0), True, crop=False)
+    conf_threshold = 0.5
+    nms_threshold = 0.5
+    scale = 1/255
+    # scale down image pixel values between 0-1 instead of 0-255
+    # (416,416) img target size
+    # swapRB=True  (BGR -> RGB)
+    # center crop = False
+    blob = cv2.dnn.blobFromImage(image, scale, (416, 416), (0, 0, 0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(get_output_layers(net))
     for out in outs:
@@ -134,10 +138,10 @@ def getIndices(image, net, classes):
                 class_ids.append(class_id)
                 confidences.append(float(confidence))
                 boxes.append([x, y, w, h])
-    indices = cv2.dnn.NMSBoxes(
-        boxes, confidences, conf_threshold, nms_threshold)
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
     return indices, boxes, classes, class_ids, image, confidences
-# Ham load model vietOCr recognition
+
+# Ham load model lib vietOCR 
 
 
 def vietocr_load():
@@ -168,66 +172,84 @@ def ReturnCrop(pathImage):
         h = box[3]
         list_boxes.append([x+w/2, y+h/2])
         label.append(str(classes[class_ids[i]]))
+        #draw_prediction(image, classes[class_ids[i]], confidences[i], round(x), round(y), round(x + w), round(y + h))
+    # cv2.imshow('anhcrop', image)
+    # cv2.waitKey()
     label_boxes = dict(zip(label, list_boxes))
     label_miss = find_miss_corner(label_boxes, classes)
-    #Noi suy goc neu thieu 1 goc cua CCCD
-    if(len(label_miss) == 1):
+    # Noi suy goc neu thieu 1 goc cua CCCD
+    if (len(label_miss) == 1):
         calculate_missed_coord_corner(label_miss, label_boxes)
         source_points = np.float32([label_boxes['top_left'], label_boxes['bottom_left'],
                                     label_boxes['bottom_right'], label_boxes['top_right']])
         crop = perspective_transoform(image, source_points)
         return crop
-    elif len(label_miss)==0:
+    elif len(label_miss) == 0:
         source_points = np.float32([label_boxes['top_left'], label_boxes['bottom_left'],
                                     label_boxes['bottom_right'], label_boxes['top_right']])
         crop = perspective_transoform(image, source_points)
         return crop
-#Ham check miss_conner
+    
+# Ham check miss_conner
+
+
 def find_miss_corner(labels, classes):
     labels_miss = []
     for i in classes:
         bool = i in labels
-        if(bool == False):
+        if (bool == False):
             labels_miss.append(i)
     return labels_miss
-#Ham tinh toan goc miss_conner
+
+# Ham tinh toan goc miss_conner
+
+
 def calculate_missed_coord_corner(label_missed, coordinate_dict):
     thresh = 0
-    if(label_missed[0]=='top_left'):
-        midpoint = np.add(coordinate_dict['top_right'], coordinate_dict['bottom_left']) / 2
+    if (label_missed[0] == 'top_left'):
+        midpoint = np.add(
+            coordinate_dict['top_right'], coordinate_dict['bottom_left']) / 2
         y = 2 * midpoint[1] - coordinate_dict['bottom_right'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['bottom_right'][0] - thresh
         coordinate_dict['top_left'] = (x, y)
-    elif(label_missed[0]=='top_right'):
-        midpoint = np.add(coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
+    elif (label_missed[0] == 'top_right'):
+        midpoint = np.add(
+            coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['bottom_left'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['bottom_left'][0] - thresh
         coordinate_dict['top_right'] = (x, y)
-    elif(label_missed[0]=='bottom_left'):
-        midpoint = np.add(coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
+    elif (label_missed[0] == 'bottom_left'):
+        midpoint = np.add(
+            coordinate_dict['top_left'], coordinate_dict['bottom_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['top_right'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['top_right'][0] - thresh
         coordinate_dict['bottom_left'] = (x, y)
-    elif(label_missed[0]=='bottom_right'):
-        midpoint = np.add(coordinate_dict['bottom_left'], coordinate_dict['top_right']) / 2
+    elif (label_missed[0] == 'bottom_right'):
+        midpoint = np.add(
+            coordinate_dict['bottom_left'], coordinate_dict['top_right']) / 2
         y = 2 * midpoint[1] - coordinate_dict['top_left'][1] - thresh
         x = 2 * midpoint[0] - coordinate_dict['top_left'][0] - thresh
         coordinate_dict['bottom_right'] = (x, y)
     return coordinate_dict
+
 # Ham tra ve ket qua thong tin CCCD
-# Upload part
+
 def ReturnInfoCard(pathImage):
     typeimage = check_type_image(pathImage)
     if (typeimage != 'png' and typeimage != 'jpeg' and typeimage != 'jpg' and typeimage != 'bmp'):
-        obj = MessageInfo(None, 1, 'Ảnh không đúng định dạng. Vui lòng thử lại !')
+        obj = MessageInfo(
+            None, 1, 'Ảnh không đúng định dạng. Vui lòng thử lại !')
         return obj
     else:
         crop = ReturnCrop(pathImage)
         # Trich xuat thong tin tu imageCrop
         if (crop is not None):
-            indices, boxes, classes, class_ids, image, confidences = getIndices(crop, net_rec, classes_rec)
+            # cv2.imshow('anhcrop', crop)
+            # cv2.waitKey()
+            indices, boxes, classes, class_ids, image, confidences = getIndices(
+                crop, net_rec, classes_rec)
             dict_var = {'id': {}, 'name': {}, 'dob': {}, 'sex': {}, 'nationality': {},
-                         'home': {}, 'address': {}, 'doe': {}, 'features':{}, 'issue_date': {} }
+                        'home': {}, 'address': {}, 'doe': {}, 'features': {}, 'issue_date': {}}
             home_text, address_text, features_text = [], [], []
             label_boxes = []
             # imgFace = None
@@ -237,18 +259,19 @@ def ReturnInfoCard(pathImage):
                 i = i[0]
                 box = boxes[i]
                 x, y, w, h = box[0], box[1], box[2], box[3]
-                start = time.time()
                 # draw_prediction(crop, classes[class_ids[i]], confidences[i], round(x), round(y), round(x + w), round(y + h))
-                if(class_ids[i] != 10):
+                if (class_ids[i] != 10):
                     label_boxes.append(str(classes[class_ids[i]]))
-                    imageCrop = image[round(y): round(y + h), round(x):round(x + w)]
-                    img = Image.fromarray(imageCrop)
-                    s = detector.predict(img)          
-                    dict_var[classes[class_ids[i]]].update({s:y})
-                end = time.time()
-                total_time = end - start
-                print(str(round(total_time,2)) + ' [sec_rec]' + classes[class_ids[i]])
-                # else:   
+                    imageCrop = image[round(y): round(
+                        y + h), round(x):round(x + w)]
+                    start = time.time()
+                    s = detector.predict(Image.fromarray(imageCrop))
+                    end = time.time()
+                    total_time = end - start
+                    print(str(round(total_time, 2)) +
+                          ' [sec_rec]' + classes[class_ids[i]])
+                    dict_var[classes[class_ids[i]]].update({s: y})
+                # else:
                 #     imgFace = imageCrop
                     # if (os.path.exists(pathSave)):
                     #     cv2.imwrite(pathSave + stringImage, imgFace)
@@ -279,7 +302,7 @@ def ReturnInfoCard(pathImage):
                 home_text = " ".join(home_text)
                 address_text = " ".join(address_text)
                 obj = ExtractCardFront(list(dict_var['id'].keys()), list(dict_var['name'].keys())[0], list(dict_var['dob'].keys()), list(dict_var['sex'].keys()),
-                                        list(dict_var['nationality'].keys())[0], home_text, address_text, list(dict_var['doe'].keys()), type, errorCode,errorMessage)
+                                       list(dict_var['nationality'].keys())[0], home_text, address_text, list(dict_var['doe'].keys()), type, errorCode, errorMessage)
                 return obj
             else:
                 obj = MessageInfo(
@@ -287,24 +310,33 @@ def ReturnInfoCard(pathImage):
                 return obj
         else:
             obj = MessageInfo(
-                None, 4, "Error! Không tìm thấy CCCD trong ảnh.")
+                None, 4, "Lỗi! Không tìm thấy CCCD trong ảnh.")
             return obj
+
+#Ham so sanh ket qua so luong khuon mat tren anh + khoang cach giua 2 khuon mat
+
 def compare(pathInput, pathSelfie):
     face_distance = None
     input_image = face_recognition.load_image_file(pathInput)
     selfie_image = face_recognition.load_image_file(pathSelfie)
     input_face_locations = face_recognition.face_locations(input_image)
-    if(len(input_face_locations)==1):
-        ### Encoded input image
-        input_face_encodings = face_recognition.face_encodings(input_image, input_face_locations)[0]
-        ### Encoded selfie image
+    if (len(input_face_locations) == 1):
+        # Encoded input image
+        input_face_encodings = face_recognition.face_encodings(
+            input_image, input_face_locations)[0]
+        # Encoded selfie image
         selfie_face_locations = face_recognition.face_locations(selfie_image)
-        if(len(selfie_face_locations)==1):
-            selfie_face_encodings = face_recognition.face_encodings(selfie_image, selfie_face_locations)[0]
-            face_distance = face_recognition.face_distance([input_face_encodings],selfie_face_encodings)[0]
-        return len(input_face_locations), len(selfie_face_locations) ,face_distance
-    else: 
-        return len(input_face_locations), 0 ,face_distance
+        if (len(selfie_face_locations) == 1):
+            selfie_face_encodings = face_recognition.face_encodings(
+                selfie_image, selfie_face_locations)[0]
+            face_distance = face_recognition.face_distance(
+                [input_face_encodings], selfie_face_encodings)[0]
+        return len(input_face_locations), len(selfie_face_locations), face_distance
+    else:
+        return len(input_face_locations), 0, face_distance
+
+#Ham tra ve ket qua duoi dang phan tram(%) theo khoang cach khuon mat
+
 def face_confidence(face_distance, face_match_threshold=0.55):
     range = (1.0 - face_match_threshold)
     linear_val = (1.0 - face_distance) / (range * 2.0)
@@ -312,14 +344,20 @@ def face_confidence(face_distance, face_match_threshold=0.55):
     if face_distance > face_match_threshold:
         return str(round(linear_val * 100, 2)) + '%'
     else:
-        value = (linear_val + ((1.0 - linear_val) * math.pow((linear_val - 0.5) * 2, 0.2))) * 100
+        value = (linear_val + ((1.0 - linear_val) *
+                 math.pow((linear_val - 0.5) * 2, 0.2))) * 100
         return str(round(value, 2)) + '%'
+
+# Load model YOLO, vietOCR
+
 detector = vietocr_load()
-net_det, classes_det = load_model('./model/det/yolov4-tiny-custom_det.weights',
+net_det, classes_det = load_model('./model/det/yolov4-tiny-custom_retrained.weights',
                                   './model/det/yolov4-tiny-custom_det.cfg', './model/det/obj_det.names')
 net_rec, classes_rec = load_model('./model/rec/yolov4-custom_rec.weights',
                                   './model/rec/yolov4-custom_rec.cfg', './model/rec/obj_rec.names')
+
 # Class object
+
 class ExtractCardFront:
     def __init__(self, id, name, dob, sex, nationality, home, address, doe, type, errorCode, errorMessage):
         self.id = id
@@ -349,22 +387,22 @@ class MessageInfo:
         self.type = type
         self.errorCode = errorCode
         self.errorMessage = errorMessage
-# i = 1
-# for file in glob.glob("D:\\Download Chorme\\cccd\cccd\\dataTest\\*.jpg"):
+# i = 211
+# for file in glob.glob("D:\\DATN\\obj_det\\*.png"):
 #     crop = ReturnCrop(file)
-#     pathSave = 'D:\DATN\DATN_Extracter_Identity_Card_VN\cropCCCD'+ '\\'
+#     pathSave = 'D:\DATN\obj_rec'+ '\\'
 #     if(crop is not None):
 #         cv2.imwrite(pathSave+'cropCCCD'+str(i) +'.jpg', crop)
 #         print("Done file " +"_ " + file)
 #         i = i + 1
-# crop = ReturnCrop('D:\DATN\DATN_Extracter_Identity_Card_VN\CCCD (481.2).jpeg')
-# if(crop is not None):
-#     cv2.imwrite('cropCCCD30.jpg', crop)
-#     print("Done file " +"_ ")
+#     else:
+#         print("Det failed file " +"_ " + file)
 # start = time.time()
 # end = time.time()
 # total_time = end - start
 # print(str(total_time) + ' [sec]')
+# obj = ReturnInfoCard('D:\DATN\DATN_Extracter_Identity_Card_VN\CCCD (480).jpeg')
+# print(obj.errorCode, obj.errorMessage)
 # if (obj.type == "cccd_front"):
 #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
 #     "data":[{"id": obj.id, "name": obj.name, "dob": obj.dob,"sex": obj.sex,
