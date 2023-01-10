@@ -134,8 +134,7 @@ def res():
     print(num_face_input, num_face_selfie, face_distance)
     if (face_distance is not None):
         res_from_distance = face_distance < 0.55
-        lb_res_facematch.configure(text='{} ({})'.format(
-            res_from_distance, face_confidence(face_distance)))
+        lb_res_facematch.configure(text='{}'.format(res_from_distance))
         lb_res_id.configure(text=objfront.id)
         lb_res_name.configure(text=objfront.name)
         lb_res_dob.configure(text=objfront.dob)

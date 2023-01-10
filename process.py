@@ -242,6 +242,7 @@ def ReturnInfoCard(pathImage):
         return obj
     else:
         crop = ReturnCrop(pathImage)
+        #cv2.imwrite('Anh0.jpg', crop)
         # Trich xuat thong tin tu imageCrop
         if (crop is not None):
             # cv2.imshow('anhcrop', crop)
@@ -356,7 +357,7 @@ net_det, classes_det = load_model('./model/det/yolov4-tiny-custom_retrained.weig
 net_rec, classes_rec = load_model('./model/rec/yolov4-custom_rec.weights',
                                   './model/rec/yolov4-custom_rec.cfg', './model/rec/obj_rec.names')
 
-# Class object
+# Class object extract information
 
 class ExtractCardFront:
     def __init__(self, id, name, dob, sex, nationality, home, address, doe, type, errorCode, errorMessage):
@@ -381,7 +382,7 @@ class ExtractCardBack:
         self.errorCode = errorCode
         self.errorMessage = errorMessage
 
-
+# Class  extract information
 class MessageInfo:
     def __init__(self, type, errorCode, errorMessage):
         self.type = type
@@ -401,7 +402,7 @@ class MessageInfo:
 # end = time.time()
 # total_time = end - start
 # print(str(total_time) + ' [sec]')
-# obj = ReturnInfoCard('D:\DATN\DATN_Extracter_Identity_Card_VN\CCCD (480).jpeg')
+# obj = ReturnInfoCard('CCCD (480).jpeg')
 # print(obj.errorCode, obj.errorMessage)
 # if (obj.type == "cccd_front"):
 #     print(json.dumps({"errorCode": obj.errorCode, "errorMessage": obj.errorMessage,
